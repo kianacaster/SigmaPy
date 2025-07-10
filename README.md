@@ -1,8 +1,9 @@
-# Sigma 16
+# SigmaPy - a Sigma16 Python port
+## Not completely working *yet*
 From "https://github.com/jtod/Sigma16": Sigma16 is a computer architecture designed for research and teaching in computer systems. This application provides a complete environment for experimenting with the architecture, including an editor, assembler, linker, emulator, and an integrated development environment (IDE) with a graphical user interface. 
 Original site: jtod.github.io/home/Sigma16/
 
-Yeah cool basically yoinked it from the original repo https://github.com/jtod/Sigma16 and rewrote the functionality in python as a CLI because I wanted to write my code in vim on my Arch Linux setup (yes, I use arch ) (the 😎 is supposed to be the sunglasses emoji but it looks like a ? to me because I’m on arch) (I use arch btw) also I kinda just felt like it. Then, I made a GUI and now it's pretty much a fully working IDE I think (ALERT ALERT IGNORE THE STEP BUTTON IT DOESN'T WORK ALERT ALERT)
+Yeah cool basically yoinked it from the original repo https://github.com/jtod/Sigma16 and rewrote the functionality in python as a CLI because I wanted to write my code in vim on my Arch Linux setup (yes, I use arch ) (the 😎 is supposed to be the sunglasses emoji but it looks like a ? to me because I’m on arch) (I use arch btw) also I kinda just felt like it. Then, I made a GUI and yeah its an ide ig (ALERT ALERT IGNORE THE STEP BUTTON IT DOESN'T WORK ALERT ALERT)
 
 You can just use the website which is much better, or clone the repo and build from source to run locally but that's cringe. I'll keep working on this python port probably just as a fun project for myself. It's not meant as a replacement for the original, just a fun thing to work on for me.
 
