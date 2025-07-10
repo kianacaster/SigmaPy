@@ -6,104 +6,111 @@ for experimenting with the architecture, including an editor,
 assembler, linker, emulator, and an integrated development environment
 (IDE) with a graphical user interface.
 
-Sigma16 is suitable for use in a first course on computer systems.  No
-prior knowledge of computer architecture is required; the only
-prerequisite is some general experience with programming.  But Sigma16
-is not limited to beginners: by following through the documentation
-and examples, you will gain understanding of machine and assembly
-language, as well as intermediate and advanced programming techniques.
+Yeah cool basically yoinked it from the original repo https://github.com/jtod/Sigma16 and rewrote the basic functionality in python as a CLI because the site just looks a bit ucky on my *Arch Linux* setup (yes, I use arch 😎) (the 😎 is supposed to be the sunglasses emoji but it looks like a ? to me because I'm on arch) (I use arch btw). 
 
-This is free software, available at
-[[https://github.com/jtod/Sigma16]] under the GPL-3 license.
+Anyway... python main.py run yourassemblycode.asm.txt basically it all you need/can do for now. Will make a GUI I guess at some point may aswell.
 
-** Don't need to install: Sigma16 runs in browser
+If you for some reason need to know more:
 
-Sigma16 runs in a web browser: you don't need to download or install
-anything.  To launch the app, just visit the Sigma16 Home Page,
-[[https://jtod.github.io/home/Sigma16/]], and *Click to run Sigma16*.
+Usage
 
-Sigma16 Version 3.8.x runs on current (2024) versions of the following
-browsers: Chrome, Edge, and Opera.  It is not currently supported on
-Safari or Firefox.
+  The Sigma16 CLI tool allows you to assemble and run Sigma16
+  assembly files.
 
-It is also possible to download the software and run it locally,
-without Internet access.  There are command line tools for running the
-assembler and linker in a shell, and the GUI can also be executed on a
-local machine.  See the Installation section in the User Guide.
+  Running the Tool
 
-** Documentation and examples
 
-The running app displays the User Guide, which shows how to get
-started step by step.  Just launch the app and follow the tutorials.
-You can also access the User Guide directly, without launching the
-app:
+  You can execute the tool using python3 src/main.py followed by
+   a command and its arguments.
 
-- [[https://sigma16.herokuapp.com/Sigma16/build/release/Sigma16/docs/UserGuide/Sigma16UserGuide.html][User Guide (html)]]
-- [[https://sigma16.herokuapp.com/Sigma16/build/release/Sigma16/docs/UserGuide/Sigma16UserGuide.pdf][User Guide (pdf)]]
+  Commands
 
-The app contains a collection of example programs.  The User Guide
-begins with tutorials that introduce the system step by step, showing
-how the examples work, followed by a reference specification of the
-architecture, instruction set, and assembly language.
+  assemble
 
-The examples include basic programming, compilation patterns,
-conditionals, loops, arrays, logic, bit manipulation, records,
-arithmetic on large natural numbers ("bignum"), modules, import and
-export, linking, relocation, pointers, lists, trees, graphs,
-concurrency, mutual exclusion, memory management, and threads and
-processes.
+  Assembles a Sigma16 assembly file and displays the assembly
+  results, including any errors.
 
-** Architecture
+  Syntax:
 
-The architecture is designed to be simple enough for beginners to
-learn easily, yet flexible enough to support advanced programming
-techniques, including systems programming.  This is a 16-bit
-architecture; all registers and memory locations are 16 bit words, and
-addresses are 16 bits.
+   1 python3 src/main.py assemble <file_path>
 
-A subset of the architecture called /Core/ is suitable for elementary
-courses in computer systems.  Core has 17 instructions, with some
-additional pseudoinstructions for convenience.
 
-The full architecture, called /Standard/, has additional instructions
-for logic, bit fields, arithmetic on large natural numbers, and
-systems programming.
+   * <file_path>: The path to your Sigma16 assembly file (e.g.,
+     hello.asm.txt).
 
-** Digital circuit
+  Example:
 
-There is also a digital circuit, available separately, that implements
-the Core architecture.  The circuit is specified at the level of logic
-gates and flip flops, and is expressed in Hydra, a functional computer
-hardware description language: [[https://github.com/jtod/Hydra]].
-Hydra can simulate the circuit, so the example programs in the Core
-architecture can run on the circuit as well as the emulator.
+   1 python3 src/main.py assemble hello.asm.txt
 
-** About the Sigma16 software
 
-The latest version is available on the Source Repository
-[[https://github.com/jtod/Sigma16]].
 
-The version number is given in the =VERSION.txt= file in the source
-directory.  It's also given in the running app on the Welcome page,
-the User Guide, and the Options page.
+  Output:
+   * Indicates if assembly was successful or if errors occurred.
+   * Lists assembly errors if any.
 
-The architecture, implementation, circuits, documentation, and
-examples are designed and written by John O'Donnell,
-[[https://jtod.github.io/index.html]].
+  run
 
-- Copyright (C) 2024 John T. O'Donnell
-- License: GNU GPL Version 3.  The full text of the license is given
-  in the source repository in Sigma16/LICENSE, as well as at
-  [[https://www.gnu.org/licenses][https://www.gnu.org/licenses]].
+  Assembles and then executes a Sigma16 assembly file in the
+  emulator. By default, it provides a concise summary of the
+  program's execution, including modified registers and accessed
+   memory locations.
 
-Sigma16 is free software: you can redistribute it and/or modify it
-under the terms of the GNU General Public License version 3.
+  Syntax:
 
-Sigma16 is distributed in the hope that it will be useful, but WITHOUT
-ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
-FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
-for more details.
 
-You should have received a copy of the GNU General Public License
-along with Sigma16.  If not, see
-[[https://www.gnu.org/licenses][https://www.gnu.org/licenses]].
+   1 python3 src/main.py run <file_path> [options]
+
+
+   * <file_path>: The path to your Sigma16 assembly file (e.g.,
+     hello.asm.txt).
+
+
+  Options:
+   * --mem-dump: Dumps the entire memory content after execution.
+   * --reg-dump: Dumps the state of all registers after
+     execution.
+   * --verbose: Enables verbose debug logging during emulation.
+     This will show detailed internal emulator operations.
+
+  Examples:
+
+   1. Run with default summary output:
+
+
+   1     python3 src/main.py run
+     ../Examples/Core/Arithmetic/Mult.asm.txt
+
+      Output:
+       * Assembly success/failure message.
+       * "Running Emulator" message.
+       * Any output from trap_read or trap_write instructions in
+         your assembly program.
+       * "Emulator halted." or "Emulator stopped..." message.
+       * "Modified Registers Summary": Lists only the registers
+         whose values changed during execution, showing their
+         final hexadecimal and decimal values.
+       * "Accessed Memory Summary": Lists memory addresses that
+         were read from or written to, showing their final
+         hexadecimal values. Addresses are grouped for
+         readability.
+
+
+   2. Run with full memory and register dumps:
+
+   1     python3 src/main.py run hello.asm.txt
+     --mem-dump --reg-dump
+
+      Output:
+       * Same as default summary, plus:
+       * A detailed dump of all registers.
+       * A detailed dump of the entire memory space.
+
+   3. Run with verbose debug logging (for development/debugging):
+
+
+   1     python3 src/main.py run hello.asm.txt --verbose
+
+      Output:
+       * Includes all common.mode.devlog messages, providing
+         extensive detail about each step of the emulation
+         process. This output can be very long.
