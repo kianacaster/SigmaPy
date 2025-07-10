@@ -12,7 +12,7 @@ Anyway… python main.py run yourassemblycode.asm.txt basically it for the CLI o
 
 1.  **Clone the repository:**
     ```bash
-    git clone <repository_url>
+    git clone https://github.com/kianacaster/SigmaPy
     cd sigma16_ide_python
     ```
 
