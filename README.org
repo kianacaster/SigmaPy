@@ -1,4 +1,5 @@
 ## Sigma16
+
 Sigma16 is a computer architecture designed for research and teaching in computer systems. This application provides a complete environment for experimenting with the architecture, including an editor, assembler, linker, emulator, and an integrated development environment (IDE) with a graphical user interface.
 
 Yeah cool basically yoinked it from the original repo https://github.com/jtod/Sigma16 and rewrote the functionality in python as a CLI because the site just looks a bit ucky on my Arch Linux setup (yes, I use arch ) (the 😎 is supposed to be the sunglasses emoji but it looks like a ? to me because I’m on arch) (I use arch btw).
