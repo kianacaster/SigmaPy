@@ -24,6 +24,9 @@ import state as st
 import architecture as arch
 import arithmetic as arith
 
+# Ensure statement_spec is accessible
+from architecture import statement_spec
+
 # ---------------------------------------------------------------------
 # Global
 # ---------------------------------------------------------------------
@@ -347,18 +350,39 @@ def parse_asm_line(ma, i):
         parse_operation(ma, s)
         return
 
-    # 2. Find label
-    parts = line.split(None, 1)
-    if parts and parts[0].endswith(':'):
-        s["fieldLabel"] = parts[0][:-1]
-        line = parts[1] if len(parts) > 1 else ""
-    
-    # 3. Find operation and operands
-    if line:
-        parts = line.split(None, 1)
-        s["fieldOperation"] = parts[0]
-        if len(parts) > 1:
-            s["fieldOperands"] = parts[1]
+    # 2. Find label, operation, and operands
+    parts = line.split(None) # Split by any whitespace, no limit
+
+    if not parts:
+        return
+
+    # Attempt to identify label, operation, and operands
+    label_candidate = parts[0]
+    if label_candidate.endswith(':'):
+        s["fieldLabel"] = label_candidate[:-1]
+        remaining_parts = parts[1:]
+    else:
+        # Check if the first part is a known operation/directive
+        # This is a heuristic to distinguish labels from operations when no colon is present
+        # and the line starts with a potential label that is not a known operation.
+        # This is tricky because a label can also be a valid operation name.
+        # For now, assume if it's not a known operation, it's a label.
+        # A more robust solution might involve a two-pass approach or a more complex grammar.
+        if label_candidate.lower() in statement_spec or label_candidate.lower() in ["data", "module", "import", "export", "reserve", "org", "equ", "end", "block"]:
+            s["fieldLabel"] = '' # No label
+            remaining_parts = parts
+        else:
+            # Assume it's a label if it's not a known operation and no colon
+            s["fieldLabel"] = label_candidate
+            remaining_parts = parts[1:]
+
+    if remaining_parts:
+        s["fieldOperation"] = remaining_parts[0]
+        if len(remaining_parts) > 1:
+            s["fieldOperands"] = ' '.join(remaining_parts[1:])
+
+    # Re-split operands by comma for the s["operands"] list
+    s["operands"] = [op.strip() for op in s["fieldOperands"].split(',') if op.strip()]
 
     # 4. Finalize and parse
     s["operands"] = [op.strip() for op in s["fieldOperands"].split(',') if op.strip()]
@@ -386,6 +410,9 @@ def parse_operation(ma, s):
     op_str = s["fieldOperation"]
     common.mode.devlog(f"parse_operation line {s["lineNumber"]} op=<{op_str}>")
     if op_str:
+        # Remove leading dot if present for directives like .data
+        if op_str.startswith('.'):
+            op_str = op_str[1:]
         x = arch.statement_spec.get(op_str)
         if x:
             common.mode.devlog(f"parse_operation: found statement_spec {x}")

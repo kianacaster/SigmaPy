@@ -1,0 +1,125 @@
+0,6,1,6
+2,7,3,7
+4,8,5,9
+6,9,7,10
+source
+
+ 4 errors detected
+
+<span class='ERR'>
+ 4 errors detected
+</span>
+<span class='ERR'>
+ 4 errors detected
+</span>
+Line Addr Code Code Source
+<span class='ListingHeader'>Line Addr Code Code Source</span>
+<span class='ListingHeader'>Line Addr Code Code Source</span>
+   1 0000                                                    ; Program Hello, world!
+   1 0000                                                    ; Program Hello, world!
+   1 0000                                                    ; Program Hello, world!
+   2 0000                                                    ; A simple starter program for Sigma16
+   2 0000                                                    ; A simple starter program for Sigma16
+   2 0000                                                    ; A simple starter program for Sigma16
+   3 0000                                                    ; Calculate result := 6 * x, where x = 7
+   3 0000                                                    ; Calculate result := 6 * x, where x = 7
+   3 0000                                                    ; Calculate result := 6 * x, where x = 7
+   4 0000           
+   4 0000           
+   4 0000           
+   5 0000                                                    ; The instructions come first, variables defined later
+   5 0000                                                    ; The instructions come first, variables defined later
+   5 0000                                                    ; The instructions come first, variables defined later
+   6 0000           
+   6 0000           
+   6 0000           
+   7 0000 f100 0006 lea R1,6[R0]                             ; R1 := 6
+   7 0000 f100 0006 lea R1,6[R0]                             ; R1 := 6
+   7 0000 f100 0006 lea R1,6[R0]                             ; R1 := 6
+   8 0002 f201 0000 load R2,x[R0]                            ; R2 := x (variable initialized to 7)
+   8 0002 f201 0000 load R2,x[R0]                            ; R2 := x (variable initialized to 7)
+   8 0002 f201 0000 load R2,x[R0]                            ; R2 := x (variable initialized to 7)
+Error: symbol x is not defined
+<span class='ERR'>Error: symbol x is not defined</span>
+<span class='ERR'>Error: symbol x is not defined</span>
+   9 0004 2312      mul R3,R1,R2                             ; R3 := 6 * x = 42 (hex 002a)
+   9 0004 2312      mul R3,R1,R2                             ; R3 := 6 * x = 42 (hex 002a)
+   9 0004 2312      mul R3,R1,R2                             ; R3 := 6 * x = 42 (hex 002a)
+  10 0005 f302 0000 store R3,result[R0]                      ; result := 6 * x
+  10 0005 f302 0000 store R3,result[R0]                      ; result := 6 * x
+  10 0005 f302 0000 store R3,result[R0]                      ; result := 6 * x
+Error: symbol result is not defined
+<span class='ERR'>Error: symbol result is not defined</span>
+<span class='ERR'>Error: symbol result is not defined</span>
+  11 0007 c000      trap R0,R0,R0                            ; halt
+  11 0007 c000      trap R0,R0,R0                            ; halt
+  11 0007 c000      trap R0,R0,R0                            ; halt
+  12 0008           
+  12 0008           
+  12 0008           
+  13 0008                                                    ; How to run the program:
+  13 0008                                                    ; How to run the program:
+  13 0008                                                    ; How to run the program:
+  14 0008                                                    ;   (1) Translate to machine language:
+  14 0008                                                    ;   (1) Translate to machine language:
+  14 0008                                                    ;   (1) Translate to machine language:
+  15 0008                                                    ;       - Assembler tab
+  15 0008                                                    ;       - Assembler tab
+  15 0008                                                    ;       - Assembler tab
+  16 0008                                                    ;       - click Assemble
+  16 0008                                                    ;       - click Assemble
+  16 0008                                                    ;       - click Assemble
+  17 0008                                                    ;   (2) Run it:
+  17 0008                                                    ;   (2) Run it:
+  17 0008                                                    ;   (2) Run it:
+  18 0008                                                    ;       - Processor tab
+  18 0008                                                    ;       - Processor tab
+  18 0008                                                    ;       - Processor tab
+  19 0008                                                    ;       - click Boot
+  19 0008                                                    ;       - click Boot
+  19 0008                                                    ;       - click Boot
+  20 0008                                                    ;       - click Step for each instruction
+  20 0008                                                    ;       - click Step for each instruction
+  20 0008                                                    ;       - click Step for each instruction
+  21 0008           
+  21 0008           
+  21 0008           
+  22 0008                                                    ; When the program halts, we should see the following:
+  22 0008                                                    ; When the program halts, we should see the following:
+  22 0008                                                    ; When the program halts, we should see the following:
+  23 0008                                                    ;   R1 contains  6 (0006)
+  23 0008                                                    ;   R1 contains  6 (0006)
+  23 0008                                                    ;   R1 contains  6 (0006)
+  24 0008                                                    ;   R2 contains  7 (0007)
+  24 0008                                                    ;   R2 contains  7 (0007)
+  24 0008                                                    ;   R2 contains  7 (0007)
+  25 0008                                                    ;   R3 contains 42 (002a)
+  25 0008                                                    ;   R3 contains 42 (002a)
+  25 0008                                                    ;   R3 contains 42 (002a)
+  26 0008                                                    ;   result contains 42 (002a)
+  26 0008                                                    ;   result contains 42 (002a)
+  26 0008                                                    ;   result contains 42 (002a)
+  27 0008                                                    ;   result is in memory, and the assembly listing shows its address
+  27 0008                                                    ;   result is in memory, and the assembly listing shows its address
+  27 0008                                                    ;   result is in memory, and the assembly listing shows its address
+  28 0008           
+  28 0008           
+  28 0008           
+  29 0008                                                    ; Variables are defined  after the program
+  29 0008                                                    ; Variables are defined  after the program
+  29 0008                                                    ; Variables are defined  after the program
+  30 0008           x .data                                  ; initial value of x = 7
+  30 0008           x .data                                  ; initial value of x = 7
+  30 0008           x .data                                  ; initial value of x = 7
+Error: x is not a valid operation
+<span class='ERR'>Error: x is not a valid operation</span>
+<span class='ERR'>Error: x is not a valid operation</span>
+  31 0008           result .data                             ; initial value of result = 0
+  31 0008           result .data                             ; initial value of result = 0
+  31 0008           result .data                             ; initial value of result = 0
+Error: result is not a valid operation
+<span class='ERR'>Error: result is not a valid operation</span>
+<span class='ERR'>Error: result is not a valid operation</span>
+  32 0008           
+  32 0008           
+  32 0008

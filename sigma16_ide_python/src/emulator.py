@@ -455,7 +455,11 @@ def execute_instruction(es):
     clear_reg_logging(es)
     clear_mem_logging(es)
     clear_instr_decode(es)
-    es.ab.write_scb(es, es.ab.SCB_CUR_INSTR_ADDR, es.pc.get())
+
+    # Store PC before execution, this is the address of the instruction being executed
+    executed_instr_addr = es.pc.get() 
+
+    es.ab.write_scb(es, es.ab.SCB_CUR_INSTR_ADDR, executed_instr_addr)
 
     mr = es.mask.get() & es.req.get()
     common.mode.devlog(f"interrupt mr = {arith.word_to_hex4(mr)}")
@@ -479,12 +483,10 @@ def execute_instruction(es):
         return
 
     common.mode.devlog("no interrupt, proceeding...")
-    es.cur_instr_addr = es.pc.get()
-    common.mode.devlog(f"ExInstr pc={arith.word_to_hex4(es.cur_instr_addr)}")
-    es.instr_code = mem_fetch_instr(es, es.cur_instr_addr)
+    es.instr_code = mem_fetch_instr(es, executed_instr_addr)
     common.mode.devlog(f"ExInstr ir={arith.word_to_hex4(es.instr_code)}")
     es.ir.put(es.instr_code)
-    es.next_instr_addr = arith.incr_address(es, es.cur_instr_addr, 1)
+    es.next_instr_addr = arith.incr_address(es, executed_instr_addr, 1)
     es.pc.put(limit_address(es, es.next_instr_addr))
     es.ab.write_scb(es, es.ab.SCB_NEXT_INSTR_ADDR, es.next_instr_addr)
     common.mode.devlog(f"ExInstr pcnew={arith.word_to_hex4(es.next_instr_addr)}")
@@ -506,6 +508,13 @@ def execute_instruction(es):
     dispatch_primary_opcode[es.ir_op](es)
     es.ab.incr_instr_count(es)
     timer_tick(es)
+
+    # After instruction execution and PC update, set cur_instr_addr to the instruction that was just executed
+    es.cur_instr_addr = executed_instr_addr
+
+    
+
+
 
 # -------------------------------------------------------------------------
 # Instruction pattern functions
