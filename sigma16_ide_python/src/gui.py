@@ -1,10 +1,10 @@
 import sys
 import time
 import threading
-from PySide6.QtCore import Qt, QObject, Signal, QThread
-from PySide6.QtGui import QFont, QAction, QIcon
+from PySide6.QtCore import Qt, QObject, Signal, QThread, QMutex, QWaitCondition
+from PySide6.QtGui import QFont, QAction, QIcon, QColor, QTextCharFormat, QTextCursor, QTextOption
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QTextEdit, QPushButton, QVBoxLayout, QWidget,
+    QApplication, QMainWindow, QTextEdit, QPushButton, QVBoxLayout, QHBoxLayout, QWidget,
     QTableView, QHeaderView, QSplitter, QGroupBox, QDockWidget, QFileDialog, QToolBar
 )
 from PySide6.QtGui import QStandardItemModel, QStandardItem
@@ -14,6 +14,8 @@ import assembler
 import emulator
 import arrbuf
 import state
+import architecture as arch
+from machine_view import MachineView
 
 class RegisterModel(QStandardItemModel):
     def __init__(self, emulator_state):
@@ -57,92 +59,146 @@ class MemoryModel(QStandardItemModel):
 class EmulatorWorker(QObject):
     instruction_executed = Signal()
     execution_finished = Signal(str)
-    # New signal to indicate a pause in continuous execution
-    execution_paused = Signal()
+    execution_paused = Signal() # Emitted when execution pauses (e.g., after a step)
 
     def __init__(self, emulator_state):
         super().__init__()
         self.es = emulator_state
-        self._running = False
-        self._stepping = False # New flag for stepping mode
+        self._run_continuous = False
+        self._step_once = False
+        self._stop_requested = False
+        self._mutex = QMutex()
+        self._wait_condition = QWaitCondition()
 
     def run(self):
-        self._running = True
-        status = self.es.ab.read_scb(self.es, self.es.ab.SCB_STATUS)
-        
-        while self._running and status not in [self.es.ab.SCB_HALTED, self.es.ab.SCB_BREAK]:
-            emulator.execute_instruction(self.es)
-            self.instruction_executed.emit()
-            status = self.es.ab.read_scb(self.es, self.es.ab.SCB_STATUS)
+        self._stop_requested = False
+        while not self._stop_requested:
+            self._mutex.lock()
+            try:
+                print(f"EmulatorWorker.run: Loop start. _run_continuous={self._run_continuous}, _step_once={self._step_once}, _stop_requested={self._stop_requested}")
+                # Determine action based on flags
+                if self._run_continuous:
+                    action = "continuous"
+                elif self._step_once:
+                    action = "step"
+                else:
+                    action = "wait"
 
-            if self._stepping: # If in stepping mode, execute one and stop
-                self._running = False
-                self.execution_paused.emit() # Indicate pause after single step
-                break
-            
-            time.sleep(0.05) # Small delay for visualization
+                print(f"EmulatorWorker.run: Determined action={action}")
 
-        if status == self.es.ab.SCB_HALTED:
-            self.execution_finished.emit("Execution halted.")
-        elif status == self.es.ab.SCB_BREAK:
-            self.execution_finished.emit("Breakpoint reached.")
-        elif self._stepping: # If it stopped because of stepping
-            pass # Handled by execution_paused
-        else:
-            self.execution_finished.emit("Execution stopped.")
+                if action == "wait":
+                    print("EmulatorWorker.run: Entering wait state...")
+                    self._wait_condition.wait(self._mutex) # Wait until signaled
+                    print("EmulatorWorker.run: Woke up from wait.")
+                    # After waking up, re-evaluate action
+                    if self._stop_requested: # Check if stop was requested while waiting
+                        print("EmulatorWorker.run: Stop requested while waiting. Breaking loop.")
+                        break
+                    if self._run_continuous:
+                        action = "continuous"
+                    elif self._step_once:
+                        action = "step"
+                    else: # Spurious wakeup or no action requested
+                        print("EmulatorWorker.run: Spurious wakeup or no action. Continuing to wait.")
+                        continue # Go back to waiting
+
+                status = self.es.ab.read_scb(self.es, self.es.ab.SCB_STATUS)
+                print(f"EmulatorWorker.run: After action determination. Status={status}")
+                if status in [self.es.ab.SCB_HALTED, self.es.ab.SCB_BREAK]:
+                    print(f"EmulatorWorker.run: Execution finished. Status={status}. Setting _stop_requested=True.")
+                    self.execution_finished.emit("Execution halted." if status == self.es.ab.SCB_HALTED else "Breakpoint reached.")
+                    self._stop_requested = True
+                    break
+
+                if action == "continuous":
+                    emulator.execute_instruction(self.es)
+                    if self._stop_requested: break # Check stop request immediately after execution
+                    self.instruction_executed.emit()
+                    time.sleep(0.05)
+                    if self._stop_requested: break # Check stop request immediately after sleep
+                elif action == "step":
+                    emulator.execute_instruction(self.es)
+                    if self._stop_requested: break # Check stop request immediately after execution
+                    self.instruction_executed.emit()
+                    self._step_once = False # Reset flag after one step
+                    self._run_continuous = False # Ensure continuous is off after a step
+                    self.execution_paused.emit()
+            finally:
+                self._mutex.unlock()
+                print("EmulatorWorker.run: Mutex unlocked.")
+
+    def start_continuous(self):
+        self._mutex.lock()
+        try:
+            self._run_continuous = True
+            self._step_once = False
+            self._wait_condition.wakeAll() # Wake up the worker
+        finally:
+            self._mutex.unlock()
+
+    def start_step(self):
+        self._mutex.lock()
+        try:
+            self._step_once = True
+            self._run_continuous = False
+            self._wait_condition.wakeAll() # Wake up the worker
+        finally:
+            self._mutex.unlock()
 
     def stop(self):
-        self._running = False
-
-    def step(self):
-        self._stepping = True
-        self._running = True # Ensure run loop starts
-        self.run() # Call run to execute one instruction
+        self._mutex.lock()
+        try:
+            self._stop_requested = True
+            self._run_continuous = False
+            self._step_once = False
+            self._wait_condition.wakeAll() # Wake up to allow it to exit
+        finally:
+            self._mutex.unlock()
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Sigma16 IDE")
         self.setGeometry(100, 100, 1400, 900)
+        self.showFullScreen() # Start in fullscreen by default
 
         self.es = emulator.EmulatorState(common.ES_gui_thread, arrbuf)
         self.setDockNestingEnabled(True)
 
-        # Create dockable code editor
+        # Create main horizontal splitter
+        main_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.setCentralWidget(main_splitter)
+
+        # Left-side vertical splitter (Code Editor and I/O Log)
+        left_vertical_splitter = QSplitter(Qt.Orientation.Vertical)
+        main_splitter.addWidget(left_vertical_splitter)
+
+        # Code Editor (left pane)
+        self.code_editor = QTextEdit() # Initialize code_editor
+        self.code_editor.setWordWrapMode(QTextOption.NoWrap)
         self.code_dock = QDockWidget("Code Editor", self)
-        self.code_editor = QTextEdit()
-        self.code_editor.setFont(QFont("Courier New", 12))
-        self.code_editor.setText(
-            """
-    module hello
-    
-    ; Simple program to add two numbers
-    
-    start:
-        lea R1, num1
-        lea R2, num2
-        load R3, 0[R1]
-        load R4, 0[R2]
-        add R5, R3, R4
-        lea R6, result
-        store R5, 0[R6]
-        trap R0, R0, R0   ; Halt
-        
-    num1: data 10
-    num2: data 20
-    result: reserve 1
-    
-    end start
-"""
-        )
         self.code_dock.setWidget(self.code_editor)
-        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.code_dock)
+        left_vertical_splitter.addWidget(self.code_dock)
 
-        # Create dockable machine state view
-        self.machine_dock = QDockWidget("Machine State", self)
-        machine_splitter = QSplitter(Qt.Orientation.Vertical)
-        self.machine_dock.setWidget(machine_splitter)
+        # I/O Log (bottom-left pane)
+        io_group = QGroupBox("I/O Log")
+        io_layout = QVBoxLayout(io_group)
+        self.io_log = QTextEdit()
+        self.io_log.setReadOnly(True)
+        io_layout.addWidget(self.io_log)
+        left_vertical_splitter.addWidget(io_group)
 
+        # Set stretch factors for left_vertical_splitter
+        left_vertical_splitter.setStretchFactor(0, 3) # Code Editor gets 75% of space
+        left_vertical_splitter.setStretchFactor(1, 1) # I/O Log gets 25% of space
+
+        # Right-side vertical splitter
+        right_splitter = QSplitter(Qt.Orientation.Vertical)
+        main_splitter.addWidget(right_splitter)
+
+        # Registers and Memory horizontal splitter
+        reg_mem_splitter = QSplitter(Qt.Orientation.Horizontal)
+        
         # Registers view
         reg_group = QGroupBox("Registers")
         reg_layout = QVBoxLayout(reg_group)
@@ -151,7 +207,9 @@ class MainWindow(QMainWindow):
         self.reg_view.setModel(self.reg_model)
         self.reg_view.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         reg_layout.addWidget(self.reg_view)
-        machine_splitter.addWidget(reg_group)
+        
+        reg_mem_splitter.addWidget(reg_group)
+        
 
         # Memory view
         mem_group = QGroupBox("Memory")
@@ -161,51 +219,63 @@ class MainWindow(QMainWindow):
         self.mem_view.setModel(self.mem_model)
         self.mem_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         mem_layout.addWidget(self.mem_view)
-        machine_splitter.addWidget(mem_group)
         
-        # I/O Log
-        io_group = QGroupBox("I/O Log")
-        io_layout = QVBoxLayout(io_group)
-        self.io_log = QTextEdit()
-        self.io_log.setReadOnly(True)
-        io_layout.addWidget(self.io_log)
-        machine_splitter.addWidget(io_group)
+        reg_mem_splitter.addWidget(mem_group)
+        reg_mem_splitter.setFixedHeight(250) # Fixed height for the combined registers and memory section
+        
+        
+        right_splitter.addWidget(reg_mem_splitter) # Add reg_mem_splitter directly to right_splitter
 
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.machine_dock)
+        # Machine View (top-right pane)
+        self.machine_view = MachineView(self.es)
+        right_splitter.addWidget(self.machine_view)
 
-        # Central widget for controls (now just a container for the toolbar)
-        central_widget = QWidget()
-        controls_layout = QVBoxLayout(central_widget)
-        self.setCentralWidget(central_widget)
+        # Set stretch factors for the right_splitter to distribute space
+        right_splitter.setStretchFactor(0, 0) # Registers/Memory (fixed height)
+        right_splitter.setStretchFactor(1, 1) # MachineView gets remaining space
+
+        # Set stretch factors for the reg_mem_splitter
+        reg_mem_splitter.setStretchFactor(0, 1)
+        reg_mem_splitter.setStretchFactor(1, 1)
+
+        # Set stretch factors for the main_splitter
+        main_splitter.setStretchFactor(0, 1) # Left side (Code Editor + I/O Log)
+        main_splitter.setStretchFactor(1, 1) # Right side (Registers/Memory + Machine View)
 
         # Create Toolbar
-        toolbar = QToolBar("Main Toolbar")
-        self.addToolBar(toolbar)
+        self.toolbar = QToolBar("Main Toolbar")
+        self.addToolBar(self.toolbar)
 
         # Run Action
         self.run_action = QAction(QIcon.fromTheme("media-playback-start"), "Run", self)
         self.run_action.triggered.connect(self.run_code)
-        toolbar.addAction(self.run_action)
+        self.toolbar.addAction(self.run_action)
 
         # Pause Action
         self.pause_action = QAction(QIcon.fromTheme("media-playback-pause"), "Pause", self)
         self.pause_action.triggered.connect(self.pause_execution)
         self.pause_action.setEnabled(False) # Initially disabled
-        toolbar.addAction(self.pause_action)
+        self.toolbar.addAction(self.pause_action)
 
         # Step Action
         self.step_action = QAction(QIcon.fromTheme("media-skip-forward"), "Step", self)
         self.step_action.triggered.connect(self.step_code)
-        self.step_action.setEnabled(False) # Initially disabled
-        toolbar.addAction(self.step_action)
+        self.step_action.setEnabled(True) # Initially enabled, can step from start
+        self.toolbar.addAction(self.step_action)
 
         # Reset Action
         self.reset_action = QAction(QIcon.fromTheme("view-refresh"), "Reset", self)
         self.reset_action.triggered.connect(self.reset_emulator)
-        toolbar.addAction(self.reset_action)
+        self.toolbar.addAction(self.reset_action)
 
         # File Menu Actions
         file_menu = self.menuBar().addMenu("&File")
+
+        # View Menu Actions
+        view_menu = self.menuBar().addMenu("&View")
+        self.fullscreen_action = QAction(QIcon.fromTheme("view-fullscreen"), "Fullscreen", self)
+        self.fullscreen_action.triggered.connect(self.toggle_fullscreen)
+        view_menu.addAction(self.fullscreen_action)
         open_action = QAction(QIcon.fromTheme("document-open"), "Open...", self)
         open_action.triggered.connect(self.open_file)
         file_menu.addAction(open_action)
@@ -219,109 +289,173 @@ class MainWindow(QMainWindow):
         file_menu.addAction(save_as_action)
 
         # Add file actions to toolbar
-        toolbar.addAction(open_action)
-        toolbar.addAction(save_action)
+        self.toolbar.addAction(open_action)
+        self.toolbar.addAction(save_action)
 
-        # Create View Menu
-        view_menu = self.menuBar().addMenu("&View")
-        view_menu.addAction(self.code_dock.toggleViewAction())
-        view_menu.addAction(self.machine_dock.toggleViewAction())
-
+        self.last_asm_info = None # To store asm_info for highlighting
         self.current_file = None # To keep track of the currently open file
-        self.emulator_thread = None # Reference to the QThread
-        self.emulator_worker = None # Reference to the EmulatorWorker
+        
+        # Initialize and start the emulator thread once
+        self.emulator_thread = QThread()
+        self.emulator_worker = EmulatorWorker(self.es)
+        self.emulator_worker.moveToThread(self.emulator_thread)
+        self.emulator_thread.started.connect(self.emulator_worker.run)
+        self.emulator_worker.instruction_executed.connect(self.update_views)
+        self.emulator_worker.execution_finished.connect(self.on_execution_finished)
+        self.emulator_worker.execution_paused.connect(self.on_execution_paused)
+        self.emulator_thread.start() # Start the worker thread once
 
+        self._assemble_and_boot() # Initialize emulator state and load code
         self.update_views()
 
     def update_views(self):
         self.reg_model.update()
         self.mem_model.update()
+        self._highlight_current_instruction()
+        self.machine_view.update_view() # Update the new machine view
 
-    def _setup_emulator_thread(self):
-        if self.emulator_thread and self.emulator_thread.isRunning():
-            self.emulator_worker.stop() # Stop any running worker
-            self.emulator_thread.quit()
-            self.emulator_thread.wait()
-
-        self.emulator_thread = QThread()
-        self.emulator_worker = EmulatorWorker(self.es)
-        self.emulator_worker.moveToThread(self.emulator_thread)
-
-        self.emulator_thread.started.connect(self.emulator_worker.run)
-        self.emulator_worker.instruction_executed.connect(self.update_views)
-        self.emulator_worker.execution_finished.connect(self.on_execution_finished)
-        self.emulator_worker.execution_paused.connect(self.on_execution_paused)
-
-    def run_code(self):
+    def _assemble_and_boot(self):
         self.io_log.clear()
         source_code = self.code_editor.toPlainText()
         asm_info = assembler.assembler("my_module", source_code)
 
         if asm_info.n_asm_errors > 0:
             self.io_log.setText(asm_info.md_text)
-            return
+            self.last_asm_info = None # Clear previous asm_info on error
+            return False
 
         obj_md = state.ObjMd(asm_info.asm_mod_name, asm_info.object_text, asm_info.md_text)
         emulator.boot(self.es, obj_md)
+        self.last_asm_info = asm_info # Store for highlighting
         self.update_views() # Show initial state after boot
+        return True
+
+    def run_code(self):
+        # Always assemble and boot when "Run" is pressed
+        if not self._assemble_and_boot():
+            return
 
         self.run_action.setEnabled(False)
         self.pause_action.setEnabled(True)
-        self.step_action.setEnabled(False) # Disable step when running continuously
-        
-        self._setup_emulator_thread()
-        self.emulator_thread.start()
+        self.step_action.setEnabled(False)
+
+        self.emulator_worker.start_continuous() # Tell worker to run continuously
 
     def pause_execution(self):
-        if self.emulator_worker: # Check if worker exists
-            self.emulator_worker.stop()
+        if self.emulator_worker: 
+            self.emulator_worker.stop() # Request worker to stop its loop
             # The worker will emit execution_finished or execution_paused
             # which will re-enable buttons
 
     def step_code(self):
-        # Only allow stepping if not currently running continuously
-        if not (self.emulator_thread and self.emulator_thread.isRunning()):
-            self.io_log.clear() # Clear log for new execution or step
-            source_code = self.code_editor.toPlainText()
-            asm_info = assembler.assembler("my_module", source_code)
-
-            if asm_info.n_asm_errors > 0:
-                self.io_log.setText(asm_info.md_text)
+        # Only assemble and boot if the emulator is halted or ready (initial state)
+        if self.es.ab.read_scb(self.es, self.es.ab.SCB_STATUS) in [self.es.ab.SCB_HALTED, self.es.ab.SCB_READY]:
+            if not self._assemble_and_boot():
                 return
 
-            # If not already booted, boot the emulator
-            if self.es.ab.read_scb(self.es, self.es.ab.SCB_STATUS) == self.es.ab.SCB_HALTED or \
-               self.es.ab.read_scb(self.es, self.es.ab.SCB_STATUS) == self.es.ab.SCB_READY: # Check if halted or ready
-                obj_md = state.ObjMd(asm_info.asm_mod_name, asm_info.object_text, asm_info.md_text)
-                emulator.boot(self.es, obj_md)
-                self.update_views()
+        self.run_action.setEnabled(False)
+        self.pause_action.setEnabled(False)
+        self.step_action.setEnabled(False)
 
-            self.run_action.setEnabled(False)
-            self.pause_action.setEnabled(False)
-            self.step_action.setEnabled(False)
-
-            self._setup_emulator_thread() # Setup a new thread for stepping
-            self.emulator_worker._stepping = True # Set stepping flag
-            self.emulator_thread.start() # Start the thread, it will execute one instruction
+        self.emulator_worker.start_step() # Tell worker to do one step
 
     def on_execution_finished(self, message):
         self.io_log.append(message)
         self.update_views() # Final update
         self.run_action.setEnabled(True)
         self.pause_action.setEnabled(False)
-        self.step_action.setEnabled(True) # Enable step after execution finishes
+        self.step_action.setEnabled(True) 
         
-        # Clean up the thread
-        if self.emulator_thread:
-            self.emulator_thread.quit()
-            self.emulator_thread.wait()
+        # No need to quit/wait the thread here, it should remain alive
 
     def on_execution_paused(self):
         self.io_log.append("Execution paused.")
         self.update_views() # Update views after pause
         self.run_action.setEnabled(True)
         self.pause_action.setEnabled(False)
-        self.step_action.setEnabled(True) # Enable step after pause
+        self.step_action.setEnabled(True) 
+
+    def reset_emulator(self):
+        # Stop the worker if it's running continuously
+        if self.emulator_worker: # Check if worker exists
+            self.emulator_worker.stop() # Request worker to stop its loop
+            time.sleep(0.1) # Give a moment for the worker to process the stop request
+            self.emulator_thread.quit() # Tell the thread to quit
+            self.emulator_thread.wait() # Wait for the thread to finish
+            self.emulator_thread = None # Clear reference to old thread
+            self.emulator_worker = None # Clear reference to old worker
+
+        # Re-initialize emulator state (registers, memory, etc.)
+        emulator.proc_reset(self.es) 
+        
+        # Re-create the worker and thread for a fresh start
+        self.emulator_thread = QThread()
+        self.emulator_worker = EmulatorWorker(self.es)
+        self.emulator_worker.moveToThread(self.emulator_thread)
+        self.emulator_thread.started.connect(self.emulator_worker.run)
+        self.emulator_worker.instruction_executed.connect(self.update_views)
+        self.emulator_worker.execution_finished.connect(self.on_execution_finished)
+        self.emulator_worker.execution_paused.connect(self.on_execution_paused)
+        self.emulator_thread.start() # Start the new worker thread
+
+        self._assemble_and_boot() # Re-assemble and boot the code after reset
+        self.io_log.clear() # Clear the I/O log
+        self.io_log.append("Emulator reset.")
+        self.last_asm_info = None # Clear asm_info on reset
+        self._clear_highlight() # Clear any line highlighting
+        self.update_views() # Update the register and memory views
+
+        # Reset button states
+        self.run_action.setEnabled(True)
+        self.pause_action.setEnabled(False)
+        self.step_action.setEnabled(True)
+
+    def _highlight_current_instruction(self):
+        self._clear_highlight() # Clear any existing highlight
+
+        # Ensure es.cur_instr_addr is set and valid
+        if hasattr(self.es, 'cur_instr_addr') and self.es.cur_instr_addr is not None:
+            if self.last_asm_info:
+                # Get the line number from the assembler's metadata
+                # The metadata maps the address of the *generated code* to the *source line number*.
+                # For directives like 'start:', the address is 0, but the actual instruction is on the next line.
+                # We need to ensure we highlight the line of the *executable* instruction.
+                
+                # Iterate through asm_stmt to find the correct line to highlight
+                target_line_number = None
+                for stmt in self.last_asm_info.asm_stmt:
+                    # Check if the statement's address matches the current instruction address
+                    # AND if it's an actual instruction (not a directive that doesn't generate code)
+                    if stmt["address"].word == self.es.cur_instr_addr and stmt["operation"]["ifmt"] != arch.iDir:
+                        target_line_number = stmt["lineNumber"]
+                        break
+                
+                if target_line_number is not None:
+                    format = QTextCharFormat()
+                    format.setBackground(QColor(Qt.GlobalColor.darkYellow))
+
+                    cursor = self.code_editor.textCursor()
+                    cursor.setPosition(0) # Start from the beginning
+                    # Move to the start of the target line
+                    cursor.movePosition(QTextCursor.MoveOperation.Down, QTextCursor.MoveMode.MoveAnchor, target_line_number)
+                    cursor.movePosition(QTextCursor.MoveOperation.StartOfLine, QTextCursor.MoveMode.MoveAnchor)
+                    cursor.movePosition(QTextCursor.MoveOperation.EndOfLine, QTextCursor.MoveMode.KeepAnchor)
+                    
+                    self.code_editor.setTextCursor(cursor)
+                    self.code_editor.setCurrentCharFormat(format)
+                    # Ensure the highlighted line is visible
+                    self.code_editor.ensureCursorVisible()
+            
+    def _clear_highlight(self):
+        format = QTextCharFormat()
+        format.setBackground(QColor(Qt.GlobalColor.transparent)) # Or default background color
+
+        cursor = self.code_editor.textCursor()
+        cursor.select(QTextCursor.SelectionType.Document) # Select entire document
+        self.code_editor.setTextCursor(cursor)
+        self.code_editor.setCurrentCharFormat(format)
+        cursor.clearSelection() # Clear selection after applying format
+        self.code_editor.setTextCursor(cursor) # Restore cursor position
 
     def open_file(self):
         file_name, _ = QFileDialog.getOpenFileName(self, "Open Assembly File", ".", "Assembly Files (*.asm.txt);;All Files (*)")
@@ -331,6 +465,8 @@ class MainWindow(QMainWindow):
                     self.code_editor.setText(f.read())
                 self.current_file = file_name
                 self.setWindowTitle(f"Sigma16 IDE - {file_name}")
+                self.io_log.append(f"File loaded: {self.current_file}")
+                self.reset_emulator() # Reset emulator state after loading new file
             except Exception as e:
                 self.io_log.append(f"Error opening file: {e}")
 
@@ -357,64 +493,61 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 self.io_log.append(f"Error saving file: {e}")
 
-    def reset_emulator(self):
-        # Stop any running emulator thread first
-        if self.emulator_thread and self.emulator_thread.isRunning():
-            self.emulator_worker.stop()
-            self.emulator_thread.quit()
-            self.emulator_thread.wait()
-
-        emulator.proc_reset(self.es) # Reset the emulator's internal state
-        self.io_log.clear() # Clear the I/O log
-        self.io_log.append("Emulator reset.")
-        self.update_views() # Update the register and memory views
-
-        # Reset button states
-        self.run_action.setEnabled(True)
-        self.pause_action.setEnabled(False)
-        self.step_action.setEnabled(True)
+    def toggle_fullscreen(self):
+        if self.isFullScreen():
+            self.showNormal()
+        else:
+            self.showFullScreen()
 
 def start_gui():
     app = QApplication(sys.argv)
     # Apply a modern QSS theme
     app.setStyleSheet("""
     QMainWindow {
-        background-color: #2b2b2b;
-        color: #f0f0f0;
+        background-color: #1a1a1a; /* Darker background */
+        color: #e0e0e0; /* Lighter text for contrast */
     }
     QTextEdit {
-        background-color: #3c3c3c;
-        color: #f0f0f0;
-        border: 1px solid #555;
+        background-color: #2a2a2a; /* Slightly lighter than main window */
+        color: #00ff00; /* Green text for code, hi-tech feel */
+        border: 1px solid #007acc; /* Blue border for focus */
         padding: 5px;
+        font-family: "Consolas", "Monaco", "Courier New", monospace; /* Monospaced font */
+        font-size: 10pt;
     }
     QPushButton {
-        background-color: #007acc;
+        background-color: #007acc; /* Vibrant blue */
         color: #ffffff;
         border: none;
         padding: 8px 16px;
         border-radius: 4px;
+        font-weight: bold;
     }
     QPushButton:hover {
-        background-color: #005f99;
+        background-color: #005f99; /* Darker blue on hover */
+    }
+    QPushButton:pressed {
+        background-color: #003f66; /* Even darker blue on press */
     }
     QTableView {
-        background-color: #3c3c3c;
-        color: #f0f0f0;
-        border: 1px solid #555;
-        gridline-color: #555;
+        background-color: #2a2a2a;
+        color: #e0e0e0;
+        border: 1px solid #007acc;
+        gridline-color: #444444; /* Subtle grid lines */
         selection-background-color: #007acc;
+        selection-color: #ffffff;
     }
     QHeaderView::section {
-        background-color: #4a4a4a;
-        color: #f0f0f0;
+        background-color: #3a3a3a;
+        color: #e0e0e0;
         padding: 4px;
-        border: 1px solid #555;
+        border: 1px solid #007acc;
+        font-weight: bold;
     }
     QGroupBox {
-        background-color: #2b2b2b;
-        color: #f0f0f0;
-        border: 1px solid #555;
+        background-color: #1a1a1a;
+        color: #e0e0e0;
+        border: 1px solid #007acc;
         border-radius: 4px;
         margin-top: 10px;
     }
@@ -422,21 +555,24 @@ def start_gui():
         subcontrol-origin: margin;
         subcontrol-position: top left;
         padding: 0 3px;
-        color: #f0f0f0;
+        color: #00ff00; /* Green title for hi-tech */
+        font-weight: bold;
     }
     QDockWidget {
-        background-color: #2b2b2b;
-        color: #f0f0f0;
-        border: 1px solid #555;
+        background-color: #1a1a1a;
+        color: #e0e0e0;
+        border: 1px solid #007acc;
     }
     QDockWidget::title {
-        background-color: #3a3a3a;
+        background-color: #2a2a2a;
         padding: 5px;
         text-align: center;
+        color: #e0e0e0;
+        font-weight: bold;
     }
     QMenuBar {
-        background-color: #3a3a3a;
-        color: #f0f0f0;
+        background-color: #2a2a2a;
+        color: #e0e0e0;
     }
     QMenuBar::item {
         padding: 5px 10px;
@@ -446,9 +582,9 @@ def start_gui():
         background-color: #007acc;
     }
     QMenu {
-        background-color: #3a3a3a;
-        color: #f0f0f0;
-        border: 1px solid #555;
+        background-color: #2a2a2a;
+        color: #e0e0e0;
+        border: 1px solid #007acc;
     }
     QMenu::item {
         padding: 5px 20px;
@@ -457,7 +593,7 @@ def start_gui():
         background-color: #007acc;
     }
     QToolBar {
-        background-color: #3a3a3a;
+        background-color: #2a2a2a;
         border: none;
         padding: 5px;
     }
@@ -465,12 +601,49 @@ def start_gui():
         background-color: transparent;
         border: none;
         padding: 5px;
+        color: #e0e0e0;
     }
     QToolButton:hover {
         background-color: #005f99;
+        border-radius: 3px;
     }
     QToolButton:pressed {
         background-color: #003f66;
+    }
+    /* Scrollbar styling for a more modern look */
+    QScrollBar:vertical {
+        border: 1px solid #444;
+        background: #333;
+        width: 10px;
+        margin: 0px 0px 0px 0px;
+    }
+    QScrollBar::handle:vertical {
+        background: #007acc;
+        min-height: 20px;
+        border-radius: 3px;
+    }
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+        background: none;
+    }
+    QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+        background: none;
+    }
+    QScrollBar:horizontal {
+        border: 1px solid #444;
+        background: #333;
+        height: 10px;
+        margin: 0px 0px 0px 0px;
+    }
+    QScrollBar::handle:horizontal {
+        background: #007acc;
+        min-width: 20px;
+        border-radius: 3px;
+    }
+    QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+        background: none;
+    }
+    QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+        background: none;
     }
     """)
     window = MainWindow()
