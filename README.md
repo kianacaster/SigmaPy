@@ -1,9 +1,9 @@
 # Sigma 16
 From "https://github.com/jtod/Sigma16": Sigma16 is a computer architecture designed for research and teaching in computer systems. This application provides a complete environment for experimenting with the architecture, including an editor, assembler, linker, emulator, and an integrated development environment (IDE) with a graphical user interface.
 
-Yeah cool basically yoinked it from the original repo https://github.com/jtod/Sigma16 and rewrote the functionality in python as a CLI because the site just looks a bit ucky on my Arch Linux setup (yes, I use arch ) (the 😎 is supposed to be the sunglasses emoji but it looks like a ? to me because I’m on arch) (I use arch btw).
+Yeah cool basically yoinked it from the original repo https://github.com/jtod/Sigma16 and rewrote the functionality in python as a CLI because I wanted to write my code in vim on my Arch Linux setup (yes, I use arch ) (the 😎 is supposed to be the sunglasses emoji but it looks like a ? to me because I’m on arch) (I use arch btw). Then, I made a GUI and now it's pretty much a fully working IDE I think (ALERT ALERT IGNORE THE STEP BUTTON IT DOESN'T WORK ALERT ALERT)
 
-Anyway… python main.py run yourassemblycode.asm.txt basically it all you need/can do for now. Will make a GUI I guess at some point may aswell.
+Anyway… python main.py run yourassemblycode.asm.txt basically it for the CLI or just use the GUI to write and run. Setup/usage for both the CLI and GUI are beneath :D 
 
 ## Setup
 
