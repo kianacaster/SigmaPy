@@ -50,8 +50,6 @@ The IDE provides a comprehensive environment for developing and testing Sigma16 
 
 ### CLI Usage (Command Line Interface)
 
-If you for some reason need to know more:
-
 Usage
 
 The Sigma16 CLI tool allows you to assemble and run Sigma16 assembly files.
