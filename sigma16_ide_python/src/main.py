@@ -94,29 +94,41 @@ def run_file(file_path, dump_mem=False, dump_regs=False, verbose=False):
         em.dump_memory(es)
 
 def main():
-    parser = argparse.ArgumentParser(description="Sigma16 IDE CLI Tool")
-    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+    # If the user provides any arguments, run in CLI mode.
+    # Otherwise, launch the GUI.
+    if len(sys.argv) > 1:
+        parser = argparse.ArgumentParser(description="Sigma16 IDE CLI Tool")
+        subparsers = parser.add_subparsers(dest="command", help="Available commands", required=True)
 
-    # Assemble command
-    assemble_parser = subparsers.add_parser("assemble", help="Assemble a Sigma16 assembly file")
-    assemble_parser.add_argument("file", help="Path to the assembly file (.asm.txt)")
+        # Assemble command
+        assemble_parser = subparsers.add_parser("assemble", help="Assemble a Sigma16 assembly file")
+        assemble_parser.add_argument("file", help="Path to the assembly file (.asm.txt)")
 
-    # Run command
-    run_parser = subparsers.add_parser("run", help="Assemble and run a Sigma16 assembly file")
-    run_parser.add_argument("file", help="Path to the assembly file (.asm.txt)")
-    run_parser.add_argument("--mem-dump", action="store_true", help="Dump memory after execution")
-    run_parser.add_argument("--reg-dump", action="store_true", help="Dump registers after execution")
-    run_parser.add_argument("--verbose", action="store_true", help="Enable verbose debug logging")
+        # Run command
+        run_parser = subparsers.add_parser("run", help="Assemble and run a Sigma16 assembly file")
+        run_parser.add_argument("file", help="Path to the assembly file (.asm.txt)")
+        run_parser.add_argument("--mem-dump", action="store_true", help="Dump memory after execution")
+        run_parser.add_argument("--reg-dump", action="store_true", help="Dump registers after execution")
+        run_parser.add_argument("--verbose", action="store_true", help="Enable verbose debug logging")
 
-    args = parser.parse_args()
+        args = parser.parse_args()
 
-    if args.command == "assemble":
-        assemble_file(args.file)
-    elif args.command == "run":
-        run_file(args.file, args.mem_dump, args.reg_dump, args.verbose)
-        common.mode.clear_trace()
+        if args.command == "assemble":
+            assemble_file(args.file)
+        elif args.command == "run":
+            run_file(args.file, args.mem_dump, args.reg_dump, args.verbose)
+            common.mode.clear_trace()
     else:
-        parser.print_help()
+        # No arguments provided, launch the GUI
+        try:
+            from gui import start_gui
+            start_gui()
+        except ImportError as e:
+            print(f"Could not import GUI components: {e}", file=sys.stderr)
+            print("Please ensure PySide6 is installed (`pip install PySide6`).", file=sys.stderr)
+            print("You can still use the CLI mode: `python src/main.py run <file>`", file=sys.stderr)
+            sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

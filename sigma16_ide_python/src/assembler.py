@@ -325,34 +325,53 @@ def require_reg(ma, s, field):
 def parse_asm_line(ma, i):
     common.mode.devlog(f"parse_asm_line i={i}")
     s = ma.asm_stmt[i]
-    
-    p_match = regexp_split_fields.search(s["srcLine"])
-    if p_match:
-        s["fieldLabel"] = p_match.group(1)
-        s["fieldSpacesAfterLabel"] = p_match.group(2)
-        s["fieldOperation"] = p_match.group(3)
-        s["fieldSpacesAfterOperation"] = p_match.group(4)
-        s["fieldOperands"] = p_match.group(5)
-        s["fieldComment"] = p_match.group(6)
-    else:
-        # Handle lines that don't match the full pattern (e.g., empty lines, comments only)
-        s["fieldLabel"] = ""
-        s["fieldSpacesAfterLabel"] = ""
-        s["fieldOperation"] = ""
-        s["fieldSpacesAfterOperation"] = ""
-        s["fieldOperands"] = ""
-        s["fieldComment"] = s["srcLine"].strip() # Treat whole line as comment if no fields
+    line = s["srcLine"]
 
+    # Reset fields
+    s["fieldLabel"] = ''
+    s["fieldOperation"] = ''
+    s["fieldOperands"] = ''
+    s["fieldComment"] = ''
+
+    # 1. Separate comment
+    comment_start = line.find(';')
+    if comment_start != -1:
+        s["fieldComment"] = line[comment_start:]
+        line = line[:comment_start].strip()
+    else:
+        line = line.strip()
+
+    if not line:
+        s["operands"] = []
+        parse_label(ma, s)
+        parse_operation(ma, s)
+        return
+
+    # 2. Find label
+    parts = line.split(None, 1)
+    if parts and parts[0].endswith(':'):
+        s["fieldLabel"] = parts[0][:-1]
+        line = parts[1] if len(parts) > 1 else ""
+    
+    # 3. Find operation and operands
+    if line:
+        parts = line.split(None, 1)
+        s["fieldOperation"] = parts[0]
+        if len(parts) > 1:
+            s["fieldOperands"] = parts[1]
+
+    # 4. Finalize and parse
+    s["operands"] = [op.strip() for op in s["fieldOperands"].split(',') if op.strip()]
     parse_label(ma, s)
     parse_operation(ma, s)
-    s["operands"] = [op.strip() for op in s["fieldOperands"].split(',') if op.strip()]
-    common.mode.devlog(f"ParseAsmLine {s["lineNumber"]}")
-    common.mode.devlog(f"  fieldLabel = {s["hasLabel"]} /{s["fieldLabel"]}/")
-    common.mode.devlog(f"  fieldOperation = /{s["fieldOperation"]}/")
-    common.mode.devlog(f"  operation = {show_operation(s["operation"])}")
-    common.mode.devlog(f"  fieldOperands = /{s["fieldOperands"]}/")
-    common.mode.devlog(f"  operands = {s["operands"]}")
-    common.mode.devlog(f"  fieldComment = /{s["fieldComment"]}/")
+
+    common.mode.devlog(f"ParseAsmLine {s['lineNumber']}")
+    common.mode.devlog(f"  fieldLabel = {s['hasLabel']} /{s['fieldLabel']}/")
+    common.mode.devlog(f"  fieldOperation = /{s['fieldOperation']}/")
+    common.mode.devlog(f"  operation = {show_operation(s['operation'])}")
+    common.mode.devlog(f"  fieldOperands = /{s['fieldOperands']}/")
+    common.mode.devlog(f"  operands = {s['operands']}")
+    common.mode.devlog(f"  fieldComment = /{s['fieldComment']}/")
 
 def parse_label(ma, s):
     if not s["fieldLabel"]:
@@ -765,18 +784,27 @@ def asm_pass2(ma):
         else:
             common.mode.devlog('pass2 other, noOperation')
 
+        # Reconstruct the source line for display to handle spacing correctly
+        display_line_parts = []
+        if s['fieldLabel']:
+            display_line_parts.append(s['fieldLabel'] + ':')
+        if s['fieldOperation']:
+            display_line_parts.append(s['fieldOperation'])
+        if s['fieldOperands']:
+            display_line_parts.append(s['fieldOperands'])
+        
+        # Join the main parts with spaces, then add the comment
+        display_line = ' '.join(display_line_parts)
+        if s['fieldComment']:
+            # Add a conventional separator before the comment
+            display_line = f"{display_line:<40} {s['fieldComment']}"
+
         s["listingLinePlain"] = (
             str(s["lineNumber"] + 1).rjust(4) +
             ' ' + arith.word_to_hex4(s["address"].word) +
             ' ' + (arith.word_to_hex4(s["codeWord1"]) if s["codeWord1"] is not None else '    ') +
             ' ' + (arith.word_to_hex4(s["codeWord2"]) if s["codeWord2"] is not None else '    ') +
-            ' ' +
-            s["fieldLabel"] +
-            s["fieldSpacesAfterLabel"] +
-            s["fieldOperation"] +
-            s["fieldSpacesAfterOperation"] +
-            s["fieldOperands"] +
-            fix_html_symbols(s["fieldComment"])
+            ' ' + fix_html_symbols(display_line)
         )
         # For now, plain and highlighted are the same in CLI
         s["listingLineHighlightedFields"] = s["listingLinePlain"]
