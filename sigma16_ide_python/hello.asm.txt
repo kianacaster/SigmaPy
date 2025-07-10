@@ -27,5 +27,5 @@
 ;   result is in memory, and the assembly listing shows its address
 
 ; Variables are defined  after the program
-x         data   7         ; initial value of x = 7
-result    data   0         ; initial value of result = 0
+x         .data   7         ; initial value of x = 7
+result    .data   0         ; initial value of result = 0

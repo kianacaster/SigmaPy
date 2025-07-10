@@ -575,18 +575,19 @@ class ObjMd:
 # -------------------------------------------------------------------------
 
 def parse_obj_line(xs):
-    obj_line_parser = re.compile(r"^([a-z]+)\s+([\w,]+)$")
-    blank_line_parser = re.compile(r"^\s*$") # Use \s* to match any whitespace
-    
-    blank_line_match = blank_line_parser.match(xs)
-    split_line_match = obj_line_parser.match(xs)
+    obj_line_parser = re.compile(r"^([a-z]+)(?:\s+(.*))?$")
+    blank_line_parser = re.compile(r"^\s*$")
     
     operation = ""
     operands = []
     
+    blank_line_match = blank_line_parser.match(xs)
+    split_line_match = obj_line_parser.match(xs)
+    
     if split_line_match:
         operation = split_line_match.group(1)
-        operands = split_line_match.group(2).split(",")
+        if split_line_match.group(2):
+            operands = split_line_match.group(2).split(",")
     elif blank_line_match:
         pass # Blank line, do nothing
     else:

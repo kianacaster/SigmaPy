@@ -210,6 +210,7 @@ aExport = "export"
 aReserve = "reserve"
 aOrg = "org"
 aEqu = "equ"
+aEnd = "end"
 aBlock = "block"
 
 # --------------------------------------------------------------------
@@ -340,7 +341,7 @@ def show_cc(c):
             ('C' if extract_bool_le(c, bit_ccC) else '') +
             ('V' if extract_bool_le(c, bit_ccV) else '') +
             ('v' if extract_bool_le(c, bit_ccv) else '') +
-            ('&lt;' if extract_bool_le(c, bit_ccl) else '') +
+            ('<' if extract_bool_le(c, bit_ccl) else '') +
             ('L' if extract_bool_le(c, bit_ccL) else '') +
             ('=' if extract_bool_le(c, bit_ccE) else '') +
             ('G' if extract_bool_le(c, bit_ccG) else '') +
@@ -463,8 +464,9 @@ statement_spec["import"] = {'ifmt': iDir, 'afmt': aImport, 'opcode': []}
 statement_spec["export"] = {'ifmt': iDir, 'afmt': aExport, 'opcode': []}
 statement_spec["reserve"] = {'ifmt': iDir, 'afmt': aReserve, 'opcode': []}
 statement_spec["org"] = {'ifmt': iDir, 'afmt': aOrg, 'opcode': []}
-statement_spec["equ"] = {'ifmt': iDir, 'afmt': aEqu, 'opcode': []}
-statement_spec["block"] = {'ifmt': iDir, 'afmt': aBlock, 'opcode': []}
+statement_spec["equ"] = { "ifmt": iDir, "afmt": aEqu,      "opcode": [0,0,0,0], "pseudo": True }
+statement_spec["end"] = { "ifmt": iDir, "afmt": aEnd,      "opcode": [0,0,0,0], "pseudo": True }
+statement_spec["block"] = { "ifmt": iDir, "afmt": aBlock,    "opcode": [0,0,0,0], "pseudo": True }
 
 # -------------------------------------
 # Pseudoinstructions
