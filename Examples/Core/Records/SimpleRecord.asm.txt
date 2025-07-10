@@ -1,4 +1,0 @@
-; SimpleRecord: define a simple record with data statements
-; Illustrate how records are represented
-; Sigma16
-
