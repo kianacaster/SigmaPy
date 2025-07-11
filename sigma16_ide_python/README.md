@@ -1,9 +1,11 @@
-Sigma16
+# SigmaPy is a Sigma16 port in Python 
+## About Sigma16(https://github.com/jtod/Sigma16)
 Sigma16 is a computer architecture designed for research and teaching in computer systems. This application provides a complete environment for experimenting with the architecture, including an editor, assembler, linker, emulator, and an integrated development environment (IDE) with a graphical user interface.
 
-Yeah cool basically yoinked it from the original repo https://github.com/jtod/Sigma16 and rewrote the functionality in python as a CLI because the site just looks a bit ucky on my Arch Linux setup (yes, I use arch ) (the 😎 is supposed to be the sunglasses emoji but it looks like a ? to me because I’m on arch) (I use arch btw).
 
-Anyway… python main.py run yourassemblycode.asm.txt basically it all you need/can do for now. Will make a GUI I guess at some point may aswell.
+Yeah cool basically yoinked it from the original repo https://github.com/jtod/Sigma16 and rewrote the functionality in python as a CLI and GUI because the site just looks a bit ucky on my Arch Linux setup (yes, I use arch ) (the 😎 is supposed to be the sunglasses emoji but it looks like a ? to me because I’m on arch) (I use arch btw).
+
+Anyway… python main.py run yourassemblycode.asm.txt basically it for the CLI and the GUI should be self explanatory. Setup/documentation beneath.
 
 ## Setup
 
